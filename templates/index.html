@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WikiMasters Collection Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=static_version) }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<header class="header">
+    <div class="brand">🎴 <span>WikiMasters</span> Collection Manager</div>
+    <div class="header-status">
+        <span id="demo-badge" class="badge badge-demo hidden">DÉMO</span>
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Non connecté</span>
+        <button id="refresh-btn" class="btn btn-secondary hidden" title="Recharge la collection depuis WikiMasters">🔄 Rafraîchir</button>
+        <button id="logout-btn" class="btn btn-ghost hidden">Déconnexion</button>
+    </div>
+</header>
+
+<nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab" data-tab="sell">💰 À Vendre</button>
+    <button class="tab" data-tab="categories">🏷️ Catégories</button>
+    <button class="tab" data-tab="collection">📋 Collection</button>
+    <button class="tab" data-tab="settings">⚙️ Paramètres</button>
+</nav>
+
+<main class="container">
+    <!-- Connexion -->
+    <section id="login-section" class="card login-card hidden">
+        <h2>Connexion à WikiMasters</h2>
+        <p id="login-hint" class="muted">Utilise les identifiants de ton fichier <code>.env</code>.</p>
+        <div id="login-fields" class="login-fields hidden">
+            <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+            <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password">
+        </div>
+        <button id="login-btn" class="btn btn-primary">Se connecter</button>
+        <p id="login-error" class="error hidden"></p>
+    </section>
+
+    <div id="loader" class="loader hidden">
+        <div class="spinner"></div>
+        <p id="loader-text">Chargement…</p>
+        <div class="progress"><div id="loader-bar" class="progress-bar indeterminate"></div></div>
+        <p class="muted small">Les prix sont gardés en cache : les chargements suivants sont beaucoup plus rapides.</p>
+    </div>
+
+    <div id="global-error" class="error-banner hidden"></div>
+    <div id="price-banner" class="info-banner hidden"></div>
+
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="tab-panel active">
+        <div class="stats-grid">
+            <div class="stat"><div class="stat-label">Cartes totales</div><div class="stat-value" id="stat-total">–</div></div>
+            <div class="stat"><div class="stat-label">Cartes uniques</div><div class="stat-value" id="stat-unique">–</div></div>
+            <div class="stat"><div class="stat-label">Valeur totale</div><div class="stat-value" id="stat-value">–</div></div>
+            <div class="stat"><div class="stat-label">Valeur moyenne</div><div class="stat-value" id="stat-avg">–</div></div>
+        </div>
+        <div class="grid-2">
+            <div class="card">
+                <h3>Distribution par rareté</h3>
+                <div class="chart-box"><canvas id="rarity-chart"></canvas></div>
+            </div>
+            <div class="card">
+                <h3>Distribution par catégorie</h3>
+                <div class="chart-box"><canvas id="category-chart"></canvas></div>
+            </div>
+        </div>
+        <div class="card" id="most-valuable-card">
+            <h3>🏆 Carte la plus précieuse</h3>
+            <div id="most-valuable" class="muted">–</div>
+        </div>
+        <p class="muted small" id="loaded-at"></p>
+    </section>
+
+    <!-- À vendre -->
+    <section id="tab-sell" class="tab-panel">
+        <div class="toolbar">
+            <select id="sell-rarity">
+                <option value="">Toutes raretés</option>
+                <option value="L">Légende</option>
+                <option value="UR">Ultra Rare</option>
+                <option value="SR">Super Rare</option>
+                <option value="R">Rare</option>
+                <option value="PC">Peu Commun</option>
+                <option value="C">Commun</option>
+            </select>
+            <input type="number" id="sell-min-price" placeholder="Prix min" min="0" step="1">
+            <input type="number" id="sell-max-price" placeholder="Prix max" min="0" step="1">
+            <span class="muted small">Score = prix moyen × demande × rareté / 100</span>
+        </div>
+        <div class="card table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>#</th><th>Carte</th><th>Rareté</th><th>Qté</th><th>Prix moyen</th>
+                    <th>Dernier prix</th><th>Demande</th><th>Tendance</th><th>Score</th><th></th>
+                </tr>
+                </thead>
+                <tbody id="sell-body"></tbody>
+            </table>
+            <p id="sell-empty" class="muted center hidden">Aucune carte ne correspond aux filtres.</p>
+        </div>
+    </section>
+
+    <!-- Catégories -->
+    <section id="tab-categories" class="tab-panel">
+        <div id="categories-grid" class="categories-grid"></div>
+    </section>
+
+    <!-- Collection -->
+    <section id="tab-collection" class="tab-panel">
+        <div class="toolbar">
+            <input type="search" id="collection-search" placeholder="🔍 Rechercher une carte…">
+            <select id="collection-rarity">
+                <option value="">Toutes raretés</option>
+                <option value="L">Légende</option>
+                <option value="UR">Ultra Rare</option>
+                <option value="SR">Super Rare</option>
+                <option value="R">Rare</option>
+                <option value="PC">Peu Commun</option>
+                <option value="C">Commun</option>
+            </select>
+            <select id="collection-category"><option value="">Toutes catégories</option></select>
+            <select id="collection-sort">
+                <option value="title">Tri : titre</option>
+                <option value="rarity">Tri : rareté</option>
+                <option value="avg_price">Tri : prix</option>
+                <option value="category">Tri : catégorie</option>
+                <option value="demand">Tri : demande</option>
+            </select>
+            <button id="collection-order" class="btn btn-secondary" title="Inverser l'ordre">↑</button>
+            <div class="spacer"></div>
+            <a class="btn btn-secondary" href="/api/export/csv">⬇ CSV</a>
+            <a class="btn btn-secondary" href="/api/export/json">⬇ JSON</a>
+        </div>
+        <div class="card table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Carte</th><th>Rareté</th><th>Catégorie</th><th>Qté</th><th>Prix moyen</th>
+                    <th>Annonces</th><th>Demande</th><th>Valeur</th><th></th>
+                </tr>
+                </thead>
+                <tbody id="collection-body"></tbody>
+            </table>
+            <p id="collection-empty" class="muted center hidden">Aucune carte trouvée.</p>
+        </div>
+        <div class="pagination">
+            <button id="page-prev" class="btn btn-secondary">‹ Précédent</button>
+            <span id="page-info"></span>
+            <button id="page-next" class="btn btn-secondary">Suivant ›</button>
+            <select id="page-size">
+                <option value="25">25 / page</option>
+                <option value="50" selected>50 / page</option>
+                <option value="100">100 / page</option>
+            </select>
+        </div>
+    </section>
+
+    <!-- Paramètres -->
+    <section id="tab-settings" class="tab-panel">
+        <div class="card settings">
+            <h3>Paramètres de vente</h3>
+            <label>Prix minimum pour vendre
+                <input type="number" id="setting-min-price" min="0" step="1">
+            </label>
+            <label>Nombre minimum d'acheteurs intéressés
+                <input type="number" id="setting-min-buyers" min="0" step="1">
+            </label>
+            <button id="save-settings" class="btn btn-primary">Enregistrer</button>
+            <span id="settings-saved" class="success hidden">✔ Enregistré</span>
+        </div>
+        <div class="card">
+            <h3>Informations</h3>
+            <ul class="info-list" id="app-info"></ul>
+            <button id="clear-cache" class="btn btn-secondary">🗑 Vider le cache des prix et recharger</button>
+        </div>
+    </section>
+</main>
+
+<!-- Modal détails -->
+<div id="modal" class="modal hidden">
+    <div class="modal-content">
+        <button class="modal-close" id="modal-close">✕</button>
+        <h2 id="modal-title"></h2>
+        <button id="debug-btn" class="btn btn-secondary btn-small">🔍 Diagnostic du prix</button>
+        <pre id="debug-output" class="debug-output hidden"></pre>
+        <div id="modal-meta" class="modal-meta"></div>
+        <div class="chart-box"><canvas id="history-chart"></canvas></div>
+        <p id="history-empty" class="muted hidden">Pas encore d'historique de prix pour cette carte.</p>
+        <h3>Cartes de la même série</h3>
+        <div id="modal-related" class="related-list"></div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js', v=static_version) }}"></script>
+</body>
+</html>

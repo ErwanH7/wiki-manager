@@ -1,0 +1,32 @@
+# Secrets et données personnelles (NE JAMAIS publier)
+.env
+.env.*
+!.env.example
+.session.json
+.price_cache.json
+.price_cache.json.tmp
+*.tmp
+
+# Environnement Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Exports générés par l'app
+wikimasters_collection.csv
+wikimasters_collection.json
+
+# Éditeurs / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
