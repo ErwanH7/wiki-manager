@@ -151,6 +151,41 @@ input:focus, select:focus { outline: none; border-color: var(--primary); }
 .progress-bar { height: 100%; background: var(--primary); transition: width .3s; }
 .progress-bar.indeterminate { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
+label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+label.check input { accent-color: var(--primary); }
+
+/* Étiquettes */
+.tag-chip {
+    display: inline-block; margin: 3px 4px 0 0; padding: 1px 8px; border-radius: 20px; font-size: 11px;
+    color: var(--tag); border: 1px solid var(--tag); background: color-mix(in srgb, var(--tag) 12%, transparent);
+}
+.tags-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.tag-card { cursor: pointer; border-left: 4px solid var(--tag); margin-bottom: 0; }
+.tag-card:hover { background: var(--bg-hover); }
+.tag-card-name { color: var(--tag); font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+
+/* Bibliothèques */
+.libraries-layout { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+.lib-form { display: flex; flex-direction: column; gap: 10px; }
+.lib-form input:not([type="checkbox"]), .lib-form select, .lib-form textarea { width: 100%; }
+.lib-form textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; resize: vertical;
+}
+.lib-rarities { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.lib-actions { display: flex; gap: 8px; }
+.lib-item { cursor: pointer; padding: 12px 14px; }
+.lib-item:hover, .lib-item.active { border-color: var(--primary); }
+.lib-item-head { display: flex; justify-content: space-between; }
+.lib-item .progress, #lib-detail .progress { max-width: none; margin: 8px 0; }
+.progress.big { height: 10px; }
+.lib-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lib-detail-head h2 { margin: 0; }
+.catalog-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.title-cell a { color: var(--text); }
+.pack-list { columns: 2; padding-left: 18px; line-height: 1.8; }
+@media (max-width: 900px) { .libraries-layout { grid-template-columns: 1fr; } .pack-list { columns: 1; } }
+
 .info-banner {
     background: rgba(124, 92, 255, .12);
     border: 1px solid var(--primary);

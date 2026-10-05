@@ -24,6 +24,7 @@
     <button class="tab" data-tab="sell">💰 À Vendre</button>
     <button class="tab" data-tab="categories">🏷️ Catégories</button>
     <button class="tab" data-tab="collection">📋 Collection</button>
+    <button class="tab" data-tab="libraries">📚 Bibliothèques</button>
     <button class="tab" data-tab="settings">⚙️ Paramètres</button>
 </nav>
 
@@ -89,6 +90,7 @@
             </select>
             <input type="number" id="sell-min-price" placeholder="Prix min" min="0" step="1">
             <input type="number" id="sell-max-price" placeholder="Prix max" min="0" step="1">
+            <label class="check"><input type="checkbox" id="sell-include-starred"> Inclure mes favoris ⭐</label>
             <span class="muted small">Score = prix moyen × demande × rareté / 100</span>
         </div>
         <div class="card table-wrap">
@@ -107,7 +109,47 @@
 
     <!-- Catégories -->
     <section id="tab-categories" class="tab-panel">
+        <h3>🏷️ Mes étiquettes</h3>
+        <div id="tags-grid" class="tags-grid"></div>
+        <h3>Catégories automatiques</h3>
         <div id="categories-grid" class="categories-grid"></div>
+    </section>
+
+    <!-- Bibliothèques -->
+    <section id="tab-libraries" class="tab-panel">
+        <div class="libraries-layout">
+            <div>
+                <div class="card">
+                    <h3 id="lib-form-title">Nouvelle bibliothèque</h3>
+                    <form id="lib-form" class="lib-form">
+                        <input id="lib-name" placeholder="Nom (ex. Seconde guerre mondiale)" maxlength="80">
+                        <select id="lib-category"><option value="">Catégorie de l'app (facultatif)</option></select>
+                        <input id="lib-keywords" placeholder="Mots-clés, séparés par des virgules (ex. nazi, staline)">
+                        <textarea id="lib-titles" rows="4" placeholder="Titres précis à posséder, un par ligne (ex. Adolf Hitler)"></textarea>
+                        <div class="lib-rarities">
+                            <span class="muted small">Raretés (aucune = toutes) :</span>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="C"> C</label>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="PC"> PC</label>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="R"> R</label>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="SR"> SR</label>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="UR"> UR</label>
+                        <label class="check"><input type="checkbox" name="lib-rarity" value="L"> L</label>
+                        </div>
+                        <label class="check"><input type="checkbox" id="lib-shiny"> Inclure les shiny ✨</label>
+                        <div class="lib-actions">
+                            <button type="submit" id="lib-save" class="btn btn-primary">Créer</button>
+                            <button type="button" id="lib-cancel" class="btn btn-ghost hidden">Annuler</button>
+                        </div>
+                        <p id="lib-error" class="error hidden"></p>
+                    </form>
+                </div>
+                <div id="lib-list"></div>
+            </div>
+            <div id="lib-detail" class="card">
+                <p class="muted">Crée une bibliothèque (un thème, une liste de cartes…) pour voir ce que tu possèdes
+                    et ce qu'il te manque : cartes à acheter sur le marché et cartes à obtenir en paquets.</p>
+            </div>
+        </div>
     </section>
 
     <!-- Collection -->
@@ -124,6 +166,8 @@
                 <option value="C">Commun</option>
             </select>
             <select id="collection-category"><option value="">Toutes catégories</option></select>
+            <select id="collection-tag"><option value="">Toutes étiquettes</option></select>
+            <label class="check"><input type="checkbox" id="collection-starred"> ⭐ Favoris seulement</label>
             <select id="collection-sort">
                 <option value="title">Tri : titre</option>
                 <option value="rarity">Tri : rareté</option>

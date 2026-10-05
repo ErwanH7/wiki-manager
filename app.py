@@ -11,10 +11,12 @@ from collections import Counter, defaultdict
 from flask import Flask, Response, jsonify, render_template, request
 
 import config
+import libraries
 from price_cache import PriceCache
 from wikimasters_api import (
     RARITY_LABELS,
     RARITY_MULTIPLIERS,
+    THEMATIC_GROUPS,
     APIError,
     AuthenticationError,
     CardAnalyzer,
@@ -288,14 +290,214 @@ def get_best_sellers():
     min_buyers = request.args.get("min_buyers", config.DEFAULT_MIN_BUYERS, type=int)
     rarity = request.args.get("rarity")
     limit = request.args.get("limit", config.BEST_SELLERS_LIMIT, type=int)
+    include_starred = request.args.get("include_starred") in ("1", "true")
 
     best = [c for c in cards if c["avg_price"] >= min_price and c["demand"] >= min_buyers and c["avg_price"] > 0]
+    if not include_starred:
+        best = [c for c in best if not c.get("starred")]
     if max_price:
         best = [c for c in best if c["avg_price"] <= max_price]
     if rarity:
         best = [c for c in best if c["rarity"] == rarity]
     best.sort(key=lambda c: c["profit_score"], reverse=True)
     return jsonify({"cards": [_public(c) for c in best[:limit]], "total": len(best)})
+
+
+@app.route("/api/tags")
+@api_errors
+def get_tags():
+    """Étiquettes WikiMasters de la collection, avec nombre de cartes et valeur."""
+    tags = {}
+    for card in _get_cards():
+        for tag in card.get("tags") or []:
+            entry = tags.setdefault(tag["name"], {**tag, "count": 0, "unique": 0, "total_value": 0.0})
+            entry["count"] += card["quantity"]
+            entry["unique"] += 1
+            entry["total_value"] = round(entry["total_value"] + card["total_value"], 2)
+    return jsonify({"tags": sorted(tags.values(), key=lambda t: t["name"].lower())})
+
+
+# --- Bibliothèques (ensembles de cartes à compléter) ---
+
+market_refresh = {"running": False}
+
+
+def _refresh_market():
+    try:
+        price_cache.set_market(state["client"].get_market_auctions())
+        price_cache.save()
+    except Exception as e:
+        logger.warning("Actualisation du marché impossible: %s", e)
+    finally:
+        market_refresh["running"] = False
+
+
+def _market_auctions(refresh_if_old=False):
+    """Enchères du cache ; relance une lecture du marché en arrière-plan si elles sont périmées."""
+    if not price_cache:
+        return []
+    age = price_cache.market_age_minutes()
+    if (refresh_if_old and isinstance(state["client"], WikiMastersClient) and not market_refresh["running"]
+            and (age is None or age > config.MARKET_CACHE_MINUTES)):
+        market_refresh["running"] = True
+        threading.Thread(target=_refresh_market, daemon=True).start()
+    return price_cache.get_market(allow_stale=True) or []
+
+
+catalog_jobs = {}  # library_id -> {"running", "done", "total", "error", "warning"}
+price_check_jobs = {}  # library_id -> idem, pour la vérification des prix sur le Marché
+
+
+def _check_market_prices(lib_id, titles):
+    """Cherche chaque carte manquante sur le Marché pour trouver l'annonce la moins chère."""
+    job = price_check_jobs[lib_id]
+    job.update(total=len(titles), done=0)
+    found = relevant = 0
+    try:
+        for title in titles:
+            if price_cache.get_market_search(title) is None:
+                auctions = state["client"].search_market(title)
+                price_cache.set_market_search(title, auctions)
+                found += len(auctions)
+                relevant += sum(1 for a in auctions
+                                if libraries.normalize_text((a.get("card") or {}).get("wikipedia_title") or "")
+                                == libraries.normalize_text(title))
+            job["done"] += 1
+        price_cache.save()
+        if found and not relevant:
+            job["warning"] = (f"Les résultats du Marché ne correspondent pas aux cartes cherchées : le paramètre "
+                              f"« {config.MARKET_SEARCH_PARAM} » n'est sans doute pas le bon "
+                              "(WIKIMASTERS_MARKET_SEARCH_PARAM dans .env).")
+    except Exception as e:
+        logger.exception("Vérification des prix du Marché échouée")
+        job["error"] = str(e)
+    finally:
+        job["running"] = False
+
+
+@app.route("/api/libraries/<library_id>/prices", methods=["POST"])
+@api_errors
+def check_library_prices(library_id):
+    lib = libraries.get_library(library_id)
+    if lib is None:
+        return _error("Bibliothèque introuvable", 404)
+    if not isinstance(state["client"], WikiMastersClient) or not price_cache:
+        return _error("Vérification indisponible en mode démo", 400)
+    job = price_check_jobs.get(library_id)
+    if not (job and job["running"]):
+        catalog, _ = _catalog_cards(lib)
+        data = libraries.compute(lib, _get_cards(), _market_auctions(), catalog)
+        titles = [c["title"] for c in data["to_buy"]] + [c["title"] for c in data["to_pack"]]
+        price_check_jobs[library_id] = {"running": True, "done": 0, "total": len(titles), "error": None, "warning": None}
+        threading.Thread(target=_check_market_prices, args=(library_id, titles), daemon=True).start()
+    return jsonify(price_check_jobs[library_id])
+
+
+def _catalog_cards(lib):
+    """Cartes du catalogue déjà trouvées (cache) pour cette bibliothèque."""
+    if not price_cache:
+        return [], 0
+    found, searched = [], 0
+    for q in libraries.catalog_queries(lib):
+        cards = price_cache.get_catalog(q)
+        if cards is not None:
+            searched += 1
+            found.extend(cards)
+    return found, searched
+
+
+def _search_catalog(lib):
+    job = catalog_jobs[lib["id"]]
+    client = state["client"]
+    queries = libraries.catalog_queries(lib)
+    job.update(total=len(queries), done=0)
+    fetched = matched = 0
+    try:
+        for q in queries:
+            cards = price_cache.get_catalog(q)
+            if cards is None:
+                cards = client.search_catalog(q)
+                price_cache.set_catalog(q, cards)
+                fetched += len(cards)
+                kw = libraries._Matcher({"keywords": [q]})
+                matched += sum(1 for c in cards if kw.matches(c["title"], c.get("category")))
+            job["done"] += 1
+        price_cache.save()
+        if fetched and not matched:
+            job["warning"] = (f"Les résultats du catalogue ne correspondent pas aux recherches : le paramètre "
+                              f"« {config.CATALOG_SEARCH_PARAM} » n'est sans doute pas le bon "
+                              "(WIKIMASTERS_CATALOG_SEARCH_PARAM dans .env).")
+    except Exception as e:
+        logger.exception("Recherche dans le catalogue échouée")
+        job["error"] = str(e)
+    finally:
+        job["running"] = False
+
+
+@app.route("/api/libraries/<library_id>/catalog", methods=["POST"])
+@api_errors
+def search_library_catalog(library_id):
+    lib = libraries.get_library(library_id)
+    if lib is None:
+        return _error("Bibliothèque introuvable", 404)
+    if not isinstance(state["client"], WikiMastersClient) or not price_cache:
+        return _error("Recherche dans le catalogue indisponible en mode démo", 400)
+    job = catalog_jobs.get(library_id)
+    if not (job and job["running"]):
+        catalog_jobs[library_id] = {"running": True, "done": 0, "total": None, "error": None, "warning": None}
+        threading.Thread(target=_search_catalog, args=(lib,), daemon=True).start()
+    return jsonify(catalog_jobs[library_id])
+
+
+@app.route("/api/libraries", methods=["GET"])
+@api_errors
+def list_libraries():
+    cards = _get_cards()
+    auctions = _market_auctions()
+    result = [{**lib, "stats": libraries.compute(lib, cards, auctions, _catalog_cards(lib)[0])["stats"]}
+              for lib in libraries.list_libraries()]
+    return jsonify({"libraries": result, "categories": sorted(THEMATIC_GROUPS)})
+
+
+@app.route("/api/libraries", methods=["POST"])
+def create_library():
+    try:
+        return jsonify(libraries.create_library(request.get_json(silent=True) or {})), 201
+    except ValueError as e:
+        return _error(str(e), 400)
+
+
+@app.route("/api/libraries/<library_id>", methods=["GET"])
+@api_errors
+def get_library(library_id):
+    lib = libraries.get_library(library_id)
+    if lib is None:
+        return _error("Bibliothèque introuvable", 404)
+    catalog, searched = _catalog_cards(lib)
+    auctions = _market_auctions(refresh_if_old=True) + (price_cache.searched_auctions() if price_cache else [])
+    result = libraries.compute(lib, _get_cards(), auctions, catalog)
+    result["owned"] = [_public(c) for c in result["owned"]]
+    result["market_loaded"] = bool(auctions)
+    age = price_cache.market_age_minutes() if price_cache else None
+    result["market"] = {"age_min": round(age) if age is not None else None, "refreshing": market_refresh["running"],
+                        "check": price_check_jobs.get(library_id)}
+    result["catalog"] = {"searched": searched, "queries": len(libraries.catalog_queries(lib)),
+                         "job": catalog_jobs.get(library_id)}
+    return jsonify(result)
+
+
+@app.route("/api/libraries/<library_id>", methods=["PUT"])
+def update_library(library_id):
+    try:
+        lib = libraries.update_library(library_id, request.get_json(silent=True) or {})
+    except ValueError as e:
+        return _error(str(e), 400)
+    return jsonify(lib) if lib else _error("Bibliothèque introuvable", 404)
+
+
+@app.route("/api/libraries/<library_id>", methods=["DELETE"])
+def delete_library(library_id):
+    return jsonify({"success": libraries.delete_library(library_id)})
 
 
 @app.route("/api/categories")

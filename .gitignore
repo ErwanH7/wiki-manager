@@ -5,6 +5,7 @@
 .session.json
 .price_cache.json
 .price_cache.json.tmp
+libraries.json
 *.tmp
 
 # Environnement Python

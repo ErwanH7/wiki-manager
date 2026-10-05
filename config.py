@@ -43,7 +43,16 @@ ENDPOINTS = {
     "sales_history": os.getenv("WIKIMASTERS_EP_SALES", "/marketplace/cards/{card_id}/sales"),
     # Enchères du marché : source des prix
     "market": os.getenv("WIKIMASTERS_EP_MARKET", "/marketplace"),
+    # Catalogue complet du jeu ("Toutes les cartes")
+    "catalog": os.getenv("WIKIMASTERS_EP_CATALOG", "/cards"),
 }
+# Nom du paramètre de recherche du catalogue (à vérifier : F12 sur "Toutes les cartes" en cherchant un nom)
+# Recherche d'une carte précise sur le Marché (à vérifier : F12 sur le Marché en cherchant un nom)
+MARKET_SEARCH_PARAM = os.getenv("WIKIMASTERS_MARKET_SEARCH_PARAM", "q")
+MARKET_SEARCH_MAX_PAGES = int(os.getenv("WIKIMASTERS_MARKET_SEARCH_MAX_PAGES", "2"))
+CATALOG_SEARCH_PARAM = os.getenv("WIKIMASTERS_CATALOG_SEARCH_PARAM", "q")
+CATALOG_MAX_PAGES = int(os.getenv("WIKIMASTERS_CATALOG_MAX_PAGES", "5"))     # 50 cartes par page
+CATALOG_CACHE_HOURS = float(os.getenv("WIKIMASTERS_CATALOG_CACHE_HOURS", "24"))
 SALES_PARAMS = {"scope": os.getenv("WIKIMASTERS_SALES_SCOPE", "summary")}
 # Cache disque des prix
 PRICE_CACHE_FILE = os.getenv("WIKIMASTERS_PRICE_CACHE", os.path.join(os.path.dirname(__file__), ".price_cache.json"))
@@ -88,6 +97,9 @@ REQUEST_TIMEOUT = int(os.getenv("WIKIMASTERS_TIMEOUT", "20"))
 # Pause entre deux requêtes pour respecter le rate limit
 REQUEST_DELAY = float(os.getenv("WIKIMASTERS_REQUEST_DELAY", "0.2"))
 MAX_WORKERS = int(os.getenv("WIKIMASTERS_MAX_WORKERS", "4"))
+
+# Bibliothèques (ensembles de cartes à compléter) : données personnelles
+LIBRARIES_FILE = os.getenv("WIKIMASTERS_LIBRARIES_FILE", os.path.join(os.path.dirname(__file__), "libraries.json"))
 
 # Valeurs par défaut des paramètres de vente
 DEFAULT_MIN_SELL_PRICE = float(os.getenv("DEFAULT_MIN_SELL_PRICE", "0"))

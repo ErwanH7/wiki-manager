@@ -366,6 +366,48 @@ class WikiMastersClient:
         logger.info("Marché: %s enchères chargées", len(auctions))
         return auctions
 
+    def search_market(self, query, max_pages=None):
+        """Enchères du Marché pour une recherche précise (nom de carte)."""
+        if not self.authenticated:
+            self.login()
+        found, seen = [], set()
+        for page in range(1, (max_pages or config.MARKET_SEARCH_MAX_PAGES) + 1):
+            payload = self._request("GET", self._url("market"), params={
+                "page": page, "limit": config.MARKET_PAGE_SIZE, "sort": config.MARKET_SORT,
+                config.MARKET_SEARCH_PARAM: query,
+            })
+            items = payload.get("auctions", []) if isinstance(payload, dict) else _extract_list(payload)
+            new = [a for a in items if a.get("id") not in seen]
+            seen.update(a.get("id") for a in new)
+            found.extend(new)
+            if not new or len(items) < config.MARKET_PAGE_SIZE:
+                break
+        return found
+
+    def search_catalog(self, query, max_pages=None):
+        """Cartes du catalogue complet correspondant à une recherche (/api/cards?search=...)."""
+        if not self.authenticated:
+            self.login()
+        found, seen = [], set()
+        for page in range(1, (max_pages or config.CATALOG_MAX_PAGES) + 1):
+            payload = self._request("GET", self._url("catalog"), params={
+                "page": page, "sort": "rarity", config.CATALOG_SEARCH_PARAM: query,
+            })
+            items = payload.get("cards", []) if isinstance(payload, dict) else _extract_list(payload)
+            new = [c for c in items if c.get("id") not in seen]
+            seen.update(c.get("id") for c in new)
+            found.extend({
+                "id": c.get("id"),
+                "title": c.get("wikipedia_title") or c.get("title") or "",
+                "rarity": normalize_rarity(c.get("rarity")),
+                "category": c.get("category") or "",
+                "wikipedia_url": c.get("wikipedia_url") or "",
+            } for c in new)
+            has_more = payload.get("searchHasMore") if isinstance(payload, dict) else None
+            if not new or has_more is False or len(items) < 50:
+                break
+        return found
+
     def get_market_index(self, cache=None, progress=None):
         if not config.ENDPOINTS.get("market"):
             return None
@@ -427,7 +469,8 @@ class WikiMastersClient:
             "is_shiny": bool(_first(raw, "is_shiny", default=False)),
             "obtained_at": _first(raw, "obtained_at", default=""),
             "starred": bool(_first(raw, "starred", default=False)),
-            "tags": [t.get("name") for t in (raw.get("tags") or []) if isinstance(t, dict) and t.get("name")],
+            "tags": [{"id": t.get("id"), "name": t["name"], "color": t.get("color") or "#8b91a3"}
+                     for t in (raw.get("tags") or []) if isinstance(t, dict) and t.get("name")],
         }
 
 

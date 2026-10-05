@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Champs d'enchère utiles à MarketIndex (le reste — vendeur, avatars… — n'est pas stocké)
 _AUCTION_FIELDS = ("id", "card_id", "is_shiny", "snapshot_rarity", "final_price", "effective_bid",
-                   "current_bid", "listing_base_amount", "base_amount", "created_at", "settled_at", "end_at")
+                   "current_bid", "listing_base_amount", "base_amount", "created_at", "settled_at", "end_at",
+                   "status")
 
 
 class PriceCache:
@@ -29,6 +30,8 @@ class PriceCache:
             self._data["sales"] = data.get("sales") or {}
             self._data["market"] = data.get("market")
             self._data["collection"] = data.get("collection")
+            self._data["catalog"] = data.get("catalog") or {}
+            self._data["market_search"] = data.get("market_search") or {}
         except (OSError, ValueError):
             pass
 
@@ -54,20 +57,31 @@ class PriceCache:
                 for cid, e in list(self._data["sales"].items()) if e["averages"]]
 
     # --- Enchères du marché ---
-    def get_market(self):
+    def get_market(self, allow_stale=False):
         market = self._data["market"]
-        if market and time.time() - market["t"] < config.MARKET_CACHE_MINUTES * 60:
+        if market and (allow_stale or time.time() - market["t"] < config.MARKET_CACHE_MINUTES * 60):
             return market["auctions"]
         return None
 
-    def set_market(self, auctions):
+    def market_age_minutes(self):
+        market = self._data["market"]
+        return (time.time() - market["t"]) / 60 if market else None
+
+    @staticmethod
+    def _compact_auctions(auctions):
         compact = []
         for a in auctions:
             item = {k: a.get(k) for k in _AUCTION_FIELDS}
             card = a.get("card") or {}
             item["card"] = {"id": card.get("id"), "rarity": card.get("rarity"),
-                            "category": card.get("category"), "is_shiny": card.get("is_shiny")}
+                            "category": card.get("category"), "is_shiny": card.get("is_shiny"),
+                            "wikipedia_title": card.get("wikipedia_title"),
+                            "wikipedia_url": card.get("wikipedia_url")}
             compact.append(item)
+        return compact
+
+    def set_market(self, auctions):
+        compact = self._compact_auctions(auctions)
         with self._lock:
             self._data["market"] = {"t": time.time(), "auctions": compact}
 
@@ -95,8 +109,40 @@ class PriceCache:
 
     def clear(self):
         with self._lock:
-            self._data = {"sales": {}, "market": None, "collection": self._data.get("collection")}
+            self._data = {"sales": {}, "market": None, "collection": self._data.get("collection"), "catalog": {},
+                          "market_search": {}}
         self.save()
+
+    # --- Recherches d'une carte précise sur le Marché ---
+    def get_market_search(self, query):
+        entry = self._data.setdefault("market_search", {}).get(query.lower())
+        if entry and time.time() - entry["t"] < config.MARKET_CACHE_MINUTES * 60:
+            return entry["auctions"]
+        return None
+
+    def set_market_search(self, query, auctions):
+        compact = self._compact_auctions(auctions)
+        with self._lock:
+            self._data.setdefault("market_search", {})[query.lower()] = {"t": time.time(), "auctions": compact}
+
+    def searched_auctions(self):
+        """Toutes les enchères trouvées par des recherches encore fraîches."""
+        result = []
+        for entry in list(self._data.setdefault("market_search", {}).values()):
+            if time.time() - entry["t"] < config.MARKET_CACHE_MINUTES * 60:
+                result.extend(entry["auctions"])
+        return result
+
+    # --- Recherches dans le catalogue complet ---
+    def get_catalog(self, query):
+        entry = self._data.setdefault("catalog", {}).get(query.lower())
+        if entry and time.time() - entry["t"] < config.CATALOG_CACHE_HOURS * 3600:
+            return entry["cards"]
+        return None
+
+    def set_catalog(self, query, cards):
+        with self._lock:
+            self._data.setdefault("catalog", {})[query.lower()] = {"t": time.time(), "cards": cards}
 
     def stats(self):
         market = self._data["market"]

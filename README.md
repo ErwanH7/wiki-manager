@@ -80,13 +80,37 @@ dans `.session.json`.
 | Onglet | Contenu |
 |---|---|
 | 📊 **Dashboard** | Nombre de cartes, valeur totale, répartition par rareté et par catégorie, carte la plus précieuse |
-| 💰 **À Vendre** | Cartes classées par score de rentabilité, filtres rareté / prix min-max |
-| 🏷️ **Catégories** | Regroupement thématique (manga, films, porno, seconde guerre mondiale, sport, lieux…) |
-| 📋 **Collection** | Recherche, filtres, tri, pagination, ⭐ favoris, exports CSV (Excel) et JSON |
+| 💰 **À Vendre** | Cartes classées par score de rentabilité, filtres rareté / prix min-max, favoris ⭐ affichés ou non |
+| 🏷️ **Catégories** | Tes étiquettes WikiMasters (nombre, valeur) et regroupement thématique automatique (manga, films, porno, seconde guerre mondiale…) |
+| 📋 **Collection** | Recherche, filtres (rareté, catégorie, étiquette, favoris), tri, pagination, exports CSV (Excel) et JSON |
+| 📚 **Bibliothèques** | Tes ensembles de cartes à compléter : possédées, à acheter sur le marché (prix, lien), à obtenir en paquets |
 | ⚙️ **Paramètres** | Prix minimum / acheteurs minimum, état du cache, vider le cache des prix |
 
 Dans la fenêtre **Détails** d'une carte : source du prix, historique des enchères, cartes de la
 même série et bouton **🔍 Diagnostic du prix** (réponse brute du site).
+
+### Bibliothèques
+Une bibliothèque regroupe les cartes d'un thème que tu veux compléter. Elle se définit par :
+- une **catégorie de l'app** (ex. « seconde guerre mondiale ») et/ou des **mots-clés** cherchés dans le
+  titre et la catégorie Wikipédia des cartes ;
+- une liste de **titres précis** (une carte par ligne) ;
+- un filtre de **rareté** facultatif, et l'option d'inclure les shiny.
+
+L'app affiche ta progression et le coût pour compléter, avec trois listes :
+- ✅ **possédées** ;
+- 🛒 **à acheter** : cartes manquantes en vente, avec le prix le plus bas et un lien
+  **« La moins chère ↗ »** vers l'enchère en cours la moins chère (enchères terminées ignorées) ;
+- 📦 **à obtenir en paquets** : cartes manquantes qui ne sont pas en vente.
+
+Deux boutons complètent ces listes :
+- **🔄 Vérifier les prix les plus bas** : cherche chaque carte manquante sur le Marché
+  (toutes ses annonces, pas seulement les 2 000 plus récentes). Résultats gardés 30 min.
+- **🔎 Chercher dans le catalogue complet** : interroge « Toutes les cartes » du jeu pour chaque
+  mot-clé et titre, afin de lister aussi les cartes du thème que personne ne vend. Résultats
+  gardés 24 h. Une bibliothèque basée sur une catégorie de l'app lance une recherche par
+  mot-clé de la catégorie : la première fois peut prendre quelques minutes.
+
+Les bibliothèques sont enregistrées dans `libraries.json` (non publié).
 
 ### Chargement rapide, même avec beaucoup de cartes
 - La collection s'affiche **immédiatement** avec les prix déjà connus.
@@ -139,6 +163,9 @@ Toutes les options sont documentées dans [.env.example](.env.example). Les plus
 | `WIKIMASTERS_SALES_CACHE_HOURS` | `12` | Durée de validité d'un prix en cache |
 | `WIKIMASTERS_SKIP_STARRED` | `1` | `0` pour aussi chercher le prix des favoris |
 | `WIKIMASTERS_MAX_ASK_RATIO` | `3` | Seuil des garde-fous de prix |
+| `WIKIMASTERS_MARKET_MAX_PAGES` | `40` | Pages de 50 enchères lues sur le Marché |
+| `WIKIMASTERS_MARKET_SEARCH_PARAM` | `q` | Paramètre de recherche du Marché (vérifié) |
+| `WIKIMASTERS_CATALOG_SEARCH_PARAM` | `q` | Paramètre de recherche du catalogue « Toutes les cartes » |
 | `WIKIMASTERS_DEMO` | auto | `1` pour forcer le mode démo |
 
 Catégories : ajoute tes mots-clés dans `THEMATIC_GROUPS` de [wikimasters_api.py](wikimasters_api.py)
@@ -155,6 +182,7 @@ Catégories : ajoute tes mots-clés dans `THEMATIC_GROUPS` de [wikimasters_api.p
 | Erreur **500** du site | Panne côté WikiMasters : l'app réessaie puis affiche la dernière collection connue |
 | Un prix semble faux | **Détails › 🔍 Diagnostic du prix**, et vérifie la « Source du prix » |
 | Prix trop anciens | **Paramètres › Vider le cache des prix et recharger** |
+| Bibliothèque : « le paramètre … n'est sans doute pas le bon » | Fais la même recherche sur le site avec F12 › Network ouvert et reporte le nom du paramètre de l'URL (`q=…`) dans `.env` |
 | Page qui ne se met pas à jour | `Ctrl + F5` |
 
 `python check_price.py "nom de carte"` affiche aussi le diagnostic d'une carte en ligne de
@@ -168,6 +196,7 @@ commande (à lancer **app fermée** : il utilise sa propre session).
 app.py               Serveur Flask : routes /api/*, chargement en arrière-plan
 wikimasters_api.py   Client WikiMasters (Supabase), marché, calcul des prix, catégories
 price_cache.py       Cache disque des prix et de la dernière collection
+libraries.py         Bibliothèques (ensembles de cartes à compléter)
 config.py            Lecture de .env
 set_session.py       Configuration de la session navigateur
 check_price.py       Diagnostic d'une carte en ligne de commande
@@ -178,7 +207,7 @@ Détails techniques : [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Fichiers à ne jamais publier
 
-`.env`, `.session.json` et `.price_cache.json` contiennent ta session et tes données : ils sont
+`.env`, `.session.json`, `.price_cache.json` et `libraries.json` contiennent ta session et tes données : ils sont
 déjà dans [.gitignore](.gitignore). Avant un `git push`, vérifie avec `git status` qu'ils n'apparaissent pas.
 
 ## Licence
